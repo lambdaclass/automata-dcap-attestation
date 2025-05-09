@@ -6,11 +6,8 @@ import {IQuoteVerifier} from "./interfaces/IQuoteVerifier.sol";
 import {BELE} from "./utils/BELE.sol";
 import "./types/Constants.sol";
 import {Header} from "./types/CommonStruct.sol";
-import {Ownable} from "solady/auth/Ownable.sol";
+import {Ownable} from "../lib/solady/src/auth/Ownable.sol";
 
-// ZK-Coprocessor imports:
-import {IRiscZeroVerifier} from "risc0/IRiscZeroVerifier.sol";
-import {ISP1Verifier} from "@sp1-contracts/ISP1Verifier.sol";
 
 enum ZkCoProcessorType {
     // if the ZkCoProcessorType is included as None in the AttestationSubmitted event log
@@ -141,25 +138,7 @@ abstract contract AttestationEntrypointBase is Ownable {
         ZkCoProcessorType zkCoprocessor,
         bytes calldata proofBytes
     ) internal returns (bool success, bytes memory verifiedOutput) {
-        ZkCoProcessorConfig memory zkConfig = _zkConfig[zkCoprocessor];
-
-        if (zkCoprocessor == ZkCoProcessorType.RiscZero) {
-            IRiscZeroVerifier(zkConfig.zkVerifier).verify(proofBytes, zkConfig.dcapProgramIdentifier, sha256(output));
-        } else if (zkCoprocessor == ZkCoProcessorType.Succinct) {
-            ISP1Verifier(zkConfig.zkVerifier).verifyProof(zkConfig.dcapProgramIdentifier, output, proofBytes);
-        } else {
-            revert Unknown_Zk_Coprocessor();
-        }
-
-        // verifies the output
-        uint16 version = uint16(bytes2(output[2:4]));
-        IQuoteVerifier quoteVerifier = quoteVerifiers[version];
-        if (address(quoteVerifier) == address(0)) {
-            return (false, bytes("Unsupported quote version"));
-        }
-        (success, verifiedOutput) = quoteVerifier.verifyZkOutput(output);
-
-        emit AttestationSubmitted(success, zkCoprocessor, verifiedOutput);
+        revert();
     }
 
     /**

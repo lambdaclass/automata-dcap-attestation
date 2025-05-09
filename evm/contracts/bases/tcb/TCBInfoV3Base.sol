@@ -6,7 +6,7 @@ import {
     TDXModule,
     TDXModuleIdentity,
     TDXModuleTCBLevelsObj
-} from "@automata-network/on-chain-pccs/helpers/FmspcTcbHelper.sol";
+} from "../../../lib/on-chain-pccs/src/helpers/FmspcTcbHelper.sol";
 import {BELE} from "../../utils/BELE.sol";
 import "./TCBInfoV2Base.sol";
 

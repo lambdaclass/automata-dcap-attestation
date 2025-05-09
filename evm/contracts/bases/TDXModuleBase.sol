@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {BytesUtils} from "../utils/BytesUtils.sol";
 
-import {TCBStatus} from "@automata-network/on-chain-pccs/helpers/FmspcTcbHelper.sol";
+import {TCBStatus} from "../../lib/on-chain-pccs/src/helpers/FmspcTcbHelper.sol";
 
 abstract contract TDXModuleBase {
     using BytesUtils for bytes;

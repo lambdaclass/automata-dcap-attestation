@@ -1,8 +1,8 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {TCBStatus} from "@automata-network/on-chain-pccs/helpers/FmspcTcbHelper.sol";
-import {X509CertObj} from "@automata-network/on-chain-pccs/helpers/X509Helper.sol";
+import {TCBStatus} from "../../lib/on-chain-pccs/src/helpers/FmspcTcbHelper.sol";
+import {X509CertObj} from "../../lib/on-chain-pccs/src/helpers/X509Helper.sol";
 
 /**
  * @title CommonStruct

@@ -1,8 +1,8 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {TCBStatus, TcbId} from "@automata-network/on-chain-pccs/helpers/FmspcTcbHelper.sol";
-import {EnclaveId} from "@automata-network/on-chain-pccs/helpers/EnclaveIdentityHelper.sol";
+import {TCBStatus, TcbId} from "../../lib/on-chain-pccs/src/helpers/FmspcTcbHelper.sol";
+import {EnclaveId} from "../../lib/on-chain-pccs/src/helpers/EnclaveIdentityHelper.sol";
 
 import {IQuoteVerifier, IPCCSRouter} from "../interfaces/IQuoteVerifier.sol";
 import {BytesUtils} from "../utils/BytesUtils.sol";

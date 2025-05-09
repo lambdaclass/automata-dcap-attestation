@@ -5,7 +5,7 @@ import {
     EnclaveIdentityJsonObj,
     IdentityObj,
     EnclaveId
-} from "@automata-network/on-chain-pccs/helpers/EnclaveIdentityHelper.sol";
+} from "../../lib/on-chain-pccs/src/helpers/EnclaveIdentityHelper.sol";
 import {
     TcbInfoJsonObj,
     TCBLevelsObj,
@@ -13,8 +13,8 @@ import {
     TcbId,
     TDXModule,
     TDXModuleIdentity
-} from "@automata-network/on-chain-pccs/helpers/FmspcTcbHelper.sol";
-import {CA} from "@automata-network/on-chain-pccs/bases/PcsDao.sol";
+} from "../../lib/on-chain-pccs/src/helpers/FmspcTcbHelper.sol";
+import {CA} from "../../lib/on-chain-pccs/src/bases/PcsDao.sol";
 
 /**
  * @title PCCS Router Interface

@@ -1,9 +1,9 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {TCBLevelsObj, TCBStatus} from "@automata-network/on-chain-pccs/helpers/FmspcTcbHelper.sol";
-import {EnclaveIdTcbStatus} from "@automata-network/on-chain-pccs/helpers/EnclaveIdentityHelper.sol";
-import {LibString} from "solady/utils/LibString.sol";
+import {TCBLevelsObj, TCBStatus} from "../../../lib/on-chain-pccs/src/helpers/FmspcTcbHelper.sol";
+import {EnclaveIdTcbStatus} from "../../../lib/on-chain-pccs/src/helpers/EnclaveIdentityHelper.sol";
+import {LibString} from "../../../lib/solady/src/utils/LibString.sol";
 import {PCKCertTCB} from "../../types/CommonStruct.sol";
 
 abstract contract TCBInfoV2Base {

@@ -3,12 +3,12 @@ pragma solidity ^0.8.0;
 
 import "./interfaces/IPCCSRouter.sol";
 
-import {Ownable} from "solady/auth/Ownable.sol";
-import {EnclaveIdentityDao} from "@automata-network/on-chain-pccs/bases/EnclaveIdentityDao.sol";
-import {FmspcTcbDao} from "@automata-network/on-chain-pccs/bases/FmspcTcbDao.sol";
-import {PcsDao} from "@automata-network/on-chain-pccs/bases/PcsDao.sol";
-import {PckDao} from "@automata-network/on-chain-pccs/bases/PckDao.sol";
-import {FmspcTcbHelper} from "@automata-network/on-chain-pccs/helpers/FmspcTcbHelper.sol";
+import {Ownable} from "../lib/solady/src/auth/Ownable.sol";
+import {EnclaveIdentityDao} from "../lib/on-chain-pccs/src/bases/EnclaveIdentityDao.sol";
+import {FmspcTcbDao} from "../lib/on-chain-pccs/src/bases/FmspcTcbDao.sol";
+import {PcsDao} from "../lib/on-chain-pccs/src/bases/PcsDao.sol";
+import {PckDao} from "../lib/on-chain-pccs/src/bases/PckDao.sol";
+import {FmspcTcbHelper} from "../lib/on-chain-pccs/src/helpers/FmspcTcbHelper.sol";
 
 /**
  * @title Automata PCCS Router
