@@ -60,9 +60,9 @@ deploy-and-configure: deploy-router deploy-verifier deploy-attestation
 	$(eval VERIFIER_ADDR := $(shell cat deployment/V4QuoteVerifier))
 	$(eval ATTESTATION_ADDR := $(shell cat deployment/AutomataDcapAttestationFee))
 	$(eval STORAGE_ADDR := $(shell cat deployment/AutomataDaoStorage))
-	rex send $(ATTESTATION_ADDR) 0 $(PRIVATE_KEY) -- "setQuoteVerifier(address)" $(VERIFIER_ADDR)
-	rex send $(PCCS_ROUTER_ADDR) 0 $(PRIVATE_KEY) -- "setAuthorized(address,bool)" $(VERIFIER_ADDR) true
-	rex send $(STORAGE_ADDR) 0 $(PRIVATE_KEY) -- "setCallerAuthorization(address,bool)" $(PCCS_ROUTER_ADDR) true
+	rex send $(ATTESTATION_ADDR) "setQuoteVerifier(address)" $(VERIFIER_ADDR) -k $(PRIVATE_KEY)
+	rex send $(PCCS_ROUTER_ADDR) "setAuthorized(address,bool)" $(VERIFIER_ADDR) true -k $(PRIVATE_KEY)
+	rex send $(STORAGE_ADDR) "setCallerAuthorization(address,bool)" $(PCCS_ROUTER_ADDR) true -k $(PRIVATE_KEY)
 
 
 deploy: deploy-and-configure
