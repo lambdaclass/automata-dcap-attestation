@@ -5,14 +5,43 @@ SOLC_FLAGS := --overwrite --optimize --via-ir
 
 P256_ADDR := 0xc2b78104907F722DABAc4C69f826a522B2754De4
 
+# Pinned dependency revisions.
+#
+# lib/ is gitignored, so without these the deployed bytecode depends on whatever
+# the upstream default branches happen to be on the day `make deploy` runs, and
+# there is no record afterwards of which version of the attestation logic a given
+# deployment is running.
+#
+# Keep each comment on its own line: Make preserves whitespace preceding an
+# inline `#`, which would be appended to the revision string.
+#
+# v5.7.0. The contracts here reach openzeppelin only transitively through
+# lib/on-chain-pccs (which pins it itself), so this pin is for build determinism
+# rather than bytecode; it is byte-identical to the master tip it replaces.
+OPENZEPPELIN_REV = cab19933c33c2ad1d4c7a84864a3601dddfd16f3
+# Untagged main tip as of 2026-08-03, pinned exactly because it is what this repo
+# has been building against. The v0.1.26 release does NOT produce identical
+# bytecode, so moving to a tagged release is a deliberate change needing its own
+# review rather than a drive-by bump.
+SOLADY_REV = c251232428b668a073293eb04c6c288b19ad5728
+# lambdaclass/automata-on-chain-pccs. This revision pins its own openzeppelin and
+# solady clones, so pinning it here also fixes the nested dependencies that reach
+# our bytecode.
+ON_CHAIN_PCCS_REV = 41a4422ffad3e8b0b5cf1c210ea9aa2c9f51adb4
+
 lib/openzeppelin:
 	git clone https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin
+	git -C lib/openzeppelin checkout --detach $(OPENZEPPELIN_REV)
 
 lib/solady:
 	git clone https://github.com/vectorized/solady lib/solady
+	git -C lib/solady checkout --detach $(SOLADY_REV)
 
 lib/on-chain-pccs:
 	git clone https://github.com/lambdaclass/automata-on-chain-pccs.git lib/on-chain-pccs
+	# Must precede `make deps` so the nested clones honour the pinned revision's
+	# own pins rather than resolving to upstream HEAD.
+	git -C lib/on-chain-pccs checkout --detach $(ON_CHAIN_PCCS_REV)
 	cd lib/on-chain-pccs; make deps
 
 deps: lib/openzeppelin lib/solady lib/on-chain-pccs
