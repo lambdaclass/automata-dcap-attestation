@@ -17,10 +17,8 @@ OPENZEPPELIN_REV = cab19933c33c2ad1d4c7a84864a3601dddfd16f3
 SOLADY_REV = c251232428b668a073293eb04c6c288b19ad5728
 # lambdaclass/automata-on-chain-pccs, which pins its own openzeppelin and solady,
 # so this also fixes the nested dependencies that reach our bytecode.
-# NOTE: currently a commit on that repo's `chore/pin-dependency-revisions` branch,
-# not on main. A default clone cannot reach it once the branch is gone, so repoint
-# this at the post-merge commit before merging here.
-ON_CHAIN_PCCS_REV = 6691609e2562065bd5087083af6c77b89124e6b3
+# Merge commit of that repo's PR #2, on main, so a default clone always reaches it.
+ON_CHAIN_PCCS_REV = 903fd1bcfd4609f7d7a2c0cb809a3240a927db2b
 
 # Clone if absent, then re-assert and verify the pin on every run, so a stale or
 # half-checked-out lib/ is corrected rather than silently reused. After editing a
