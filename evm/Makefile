@@ -1,268 +1,115 @@
-# Configuration
-VERIFIER ?= etherscan
-VERIFIER_URL ?=
-SIMULATED ?=
-KEYSTORE_PATH ?= keystores/dcap_prod
-PRIVATE_KEY ?=
-UNLOCKED ?=
-QUOTE_VERIFIER_VERSION ?=
-DEPLOYMENT_DIR ?= ../rust-crates/libraries/network-registry/deployment/current
+$(eval CHAIN_ID := $(shell rex chain-id))
+$(eval OWNER := $(shell rex address))
 
-# Required environment variables check
-check_env:
-ifndef MULTICHAIN
-ifdef RPC_URL
-	$(eval CHAIN_ID := $(shell cast chain-id --rpc-url $(RPC_URL)))
-	@echo "Chain ID: $(CHAIN_ID)"
-else
-	$(error RPC_URL is not set)
-endif
-else
-	@echo "MULTICHAIN mode enabled - skipping RPC_URL check"
-endif
+SOLC_FLAGS := --overwrite --optimize --via-ir
 
-# Get the Owner's Wallet Address
-get_owner:
-ifdef UNLOCKED
-ifndef OWNER
-	$(error OWNER is not set. Please set OWNER when UNLOCKED=true)
-endif
-else
-ifdef PRIVATE_KEY
-	$(eval OWNER := $(shell cast wallet address --private-key $(PRIVATE_KEY)))
-else
-	$(eval $(if $(KEYSTORE_PASSWORD),,KEYSTORE_PASSWORD := $(shell read -s -p "Enter keystore password: " pwd; echo $$pwd)))
-	$(eval OWNER := $(shell cast wallet address --keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD) \
-		|| (echo "Improper wallet configuration"; exit 1)))
-endif
-endif
-	@echo "\nWallet Owner: $(OWNER)"
+# contracts/ is kept byte-identical to upstream apart from the disabled ZK route in
+# AttestationEntrypointBase.sol, so imports resolve through these remappings rather
+# than being rewritten to relative paths. solady and openzeppelin come from the nested
+# clones inside lib/automata-on-chain-pccs, the same nesting upstream uses, so
+# on-chain-pccs is the single dependency this repo has to pin.
+PCCS_LIB := lib/automata-on-chain-pccs
+# Two openzeppelin remappings are needed: this repo imports `openzeppelin/contracts/...`
+# while the on-chain-pccs sources compiled in alongside it import
+# `@openzeppelin/contracts/...`. solc resolves by longest matching prefix, so both apply.
+SOLC_REMAP := \
+	@automata-network/on-chain-pccs/=$(PCCS_LIB)/src/ \
+	solady/=$(PCCS_LIB)/lib/solady/src/ \
+	openzeppelin/=$(PCCS_LIB)/lib/openzeppelin-contracts/ \
+	@openzeppelin/contracts/=$(PCCS_LIB)/lib/openzeppelin-contracts/contracts/
+SOLC := solc $(SOLC_FLAGS) $(SOLC_REMAP)
 
-# Get the Owner's wallet address from env
-get_owner_env:
-ifdef OWNER
-	@echo "\nUsing Owner from environment: $(OWNER)"
-else
-	$(error OWNER is not set. Please set the OWNER environment variable.)
-endif
+P256_ADDR := 0xc2b78104907F722DABAc4C69f826a522B2754De4
 
-# Deployment targets
-deploy-router: check_env get_owner
-	@echo "Deploying PCCSRouter..."
-	@OWNER=$(OWNER) \
-		forge script DeployRouter \
-		$(if $(MULTICHAIN),,--rpc-url $(RPC_URL)) \
-		$(if $(UNLOCKED), --unlocked --sender $(OWNER), \
-		$(if $(PRIVATE_KEY), --private-key $(PRIVATE_KEY), \
-		--keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD))) \
-		$(if $(SIMULATED),, --broadcast) \
-		$(if $(filter true,$(SIMULATED)),,--skip-simulation) \
-		$(if $(LEGACY), --legacy) \
-		-vv
-	@echo "PCCSRouter deployed"
+# Must match the TCB evaluation data number the on-chain-pccs versioned DAOs were
+# deployed under. A quote verified through the 1-argument verifyAndAttestOnChain
+# resolves eval number 0 to TcbEvalDao's `standard` value, and the router then looks
+# the versioned DAOs up by that number.
+TCB_EVAL_NUMBER ?= 19
 
-setup-router: check_env get_owner
-ifndef SIMULATED
-	@storageaddr=$$(jq -r ".AutomataDaoStorage" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/onchain_pccs.json); \
-	storagev2addr=$$(jq -r ".AutomataDaoStorageV2 // empty" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/onchain_pccs.json); \
-	routeraddr=$$(jq -r ".PCCSRouter" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/dcap.json); \
-	if [ "$$storageaddr" != "null" ] && [ "$$routeraddr" != "null" ]; then \
-		echo "Granting PCCSRouter authorization to call PCCS Storage..."; \
-		cast send $$storageaddr \
-			--rpc-url $(RPC_URL) \
-			$(if $(UNLOCKED), --unlocked --from $(OWNER), \
-			$(if $(PRIVATE_KEY), --private-key $(PRIVATE_KEY), \
-			--keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD))) \
-			"setCallerAuthorization(address,bool)" \
-			$$routeraddr \
-			true; \
-	fi; \
-	if [ -n "$$storagev2addr" ] && [ "$$routeraddr" != "null" ]; then \
-		echo "Granting PCCSRouter authorization to call PCCS Storage V2..."; \
-		cast send $$storagev2addr \
-			--rpc-url $(RPC_URL) \
-			$(if $(UNLOCKED), --unlocked --from $(OWNER), \
-			$(if $(PRIVATE_KEY), --private-key $(PRIVATE_KEY), \
-			--keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD))) \
-			"setCallerAuthorization(address,bool)" \
-			$$routeraddr \
-			true; \
-	fi
-else
-	@echo "Skipping setup-router in simulated mode"
-endif
+# Pinned dependency revision. lib/ is gitignored, so this is the only record of what a
+# deployment was built from. This revision pins its own openzeppelin and solady, so
+# pinning it here fixes the whole transitive tree.
+# Comments stay off the value line: Make keeps whitespace before an inline `#`.
+ON_CHAIN_PCCS_REV = 4f1032d924b0262cc977d1ddf4bb7a82d8f49c2c
 
-deploy-attestation: check_env get_owner
-	@echo "Deploying AutomataDCAPAttestationFee..."
-	@OWNER=$(OWNER) \
-		forge script AttestationScript \
-		--sig "deployEntrypoint()" \
-		$(if $(MULTICHAIN),,--rpc-url $(RPC_URL)) \
-		$(if $(UNLOCKED), --unlocked --sender $(OWNER), \
-		$(if $(PRIVATE_KEY), --private-key $(PRIVATE_KEY), \
-		--keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD))) \
-		$(if $(SIMULATED),, --broadcast) \
-		$(if $(filter true,$(SIMULATED)),,--skip-simulation) \
-		$(if $(LEGACY), --legacy) \
-		-vv
-	@echo "AutomataDCAPAttestationFee deployed"
+# Clone if absent, then re-assert and verify the pin on every run, so a stale or
+# half-checked-out lib/ is corrected rather than silently reused. `make clean` removes
+# every pinned tree, for when a pin cannot be re-asserted in place.
+define pin
+	@test -d $(1)/.git || git clone -q $(2) $(1)
+	@git -C $(1) cat-file -e "$(3)^{commit}" 2>/dev/null || git -C $(1) fetch -q --tags origin
+	@git -c advice.detachedHead=false -C $(1) checkout -q --detach $(3)
+	@test "$$(git -C $(1) rev-parse HEAD)" = "$(3)" || { echo "$(1): not at $(3)"; exit 1; }
+endef
 
-deploy-verifier: check_env get_owner
-ifndef QUOTE_VERIFIER_VERSION
-	$(error QUOTE_VERIFIER_VERSION is not set)
-else
-	@echo "Deploying QuoteVerifierV$(QUOTE_VERIFIER_VERSION)..."
-	@OWNER=$(OWNER) QUOTE_VERIFIER_VERSION=$(QUOTE_VERIFIER_VERSION) \
-		forge script DeployVerifier \
-		$(if $(MULTICHAIN),,--rpc-url $(RPC_URL)) \
-		$(if $(UNLOCKED), --unlocked --sender $(OWNER), \
-		$(if $(PRIVATE_KEY), --private-key $(PRIVATE_KEY), \
-		--keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD))) \
-		$(if $(SIMULATED),, --broadcast) \
-		$(if $(filter true,$(SIMULATED)),,--skip-simulation) \
-		$(if $(LEGACY), --legacy) \
-		-vv
-	@echo "QuoteVerifierV$(QUOTE_VERIFIER_VERSION) deployed"
-endif
+.PHONY: deps
+# on-chain-pccs is pinned before its own `make deps` runs, so the nested clones come
+# from the pinned revision's Makefile rather than resolving to upstream HEAD.
+deps:
+	mkdir -p deployment
+	$(call pin,$(PCCS_LIB),https://github.com/lambdaclass/automata-on-chain-pccs.git,$(ON_CHAIN_PCCS_REV))
+	cd $(PCCS_LIB) && $(MAKE) deps
 
-# deploy all verifiers with the versions we support
-deploy-all-verifiers: check_env get_owner
-	@SUPPORTED_VERSIONS=$$(jq -r '.supportedVersions[]' verifier-versions.json); \
-	echo "Deploying verifiers for versions: $$SUPPORTED_VERSIONS"; \
-	for version in $$SUPPORTED_VERSIONS; do \
-		echo "=== Deploying V$$version QuoteVerifier ==="; \
-		make deploy-verifier QUOTE_VERIFIER_VERSION=$$version OWNER=$(OWNER) ETHERSCAN_API_KEY=$(ETHERSCAN_API_KEY) RPC_URL=$(RPC_URL) PRIVATE_KEY=$(PRIVATE_KEY) KEYSTORE_PATH=$(KEYSTORE_PATH) KEYSTORE_PASSWORD=$(KEYSTORE_PASSWORD) SIMULATED=$(SIMULATED) LEGACY=$(LEGACY) || exit 1; \
-	done
+# ---------------------------------------------------------------- compile
 
-deploy-all: deploy-router setup-router deploy-attestation deploy-all-verifiers
-	@echo "Deployment completed"
+out/PCCSRouter.bin: | deps
+	$(SOLC) contracts/PCCSRouter.sol --bin -o out/
 
-verify-all: check_env get_owner_env
-	@if [ ! -f $(DEPLOYMENT_DIR)/$(CHAIN_ID)/dcap.json ]; then \
-		echo "Deployment not found."; \
-		exit 1; \
-	fi
-	@echo "Determining P256 Verifier address..."
-	@P256_ADDRESS_VAL=$$(forge script P256Configuration --rpc-url $(RPC_URL) --sig "simulateVerify()" -vv | awk '/P256Verifier address:/ { print $$NF; exit }'); \
-	echo "Using P256 Verifier address: $$P256_ADDRESS_VAL"; \
-	ROUTER_ADDR=$$(jq -r ".PCCSRouter" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/dcap.json); \
-	PCS_DAO_ADDR=$$(jq -r ".AutomataPcsDao" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/onchain_pccs.json); \
-	PCK_DAO_ADDR=$$(jq -r ".AutomataPckDao" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/onchain_pccs.json); \
-	TCB_EVAL_DAO_ADDR=$$(jq -r ".AutomataTcbEvalDao" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/onchain_pccs.json); \
-	X509_HELPER_ADDR=$$(jq -r ".PCKHelper" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/onchain_pccs.json); \
-	CRL_HELPER_ADDR=$$(jq -r ".X509CRLHelper" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/onchain_pccs.json); \
-	FMSPC_TCB_HELPER_ADDR=$$(jq -r ".FmspcTcbHelper" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/onchain_pccs.json); \
-	for contract in PCCSRouter AutomataDcapAttestationFee V3QuoteVerifier V4QuoteVerifier; do \
-		addr=$$(jq -r ".$$contract" $(DEPLOYMENT_DIR)/$(CHAIN_ID)/dcap.json); \
-		current_encoded_args=""; \
-		current_contract_path_name=""; \
-		if [ "$$addr" != "null" ]; then \
-			if [ "$$contract" == "PCCSRouter" ]; then \
-				current_encoded_args=$$(cast abi-encode "constructor(address,address,address,address,address,address,address)" $(OWNER) $$TCB_EVAL_DAO_ADDR $$PCS_DAO_ADDR $$PCK_DAO_ADDR $$X509_HELPER_ADDR $$CRL_HELPER_ADDR $$FMSPC_TCB_HELPER_ADDR); \
-				current_contract_path_name="contracts/PCCSRouter.sol:PCCSRouter"; \
-			elif [ "$$contract" == "AutomataDcapAttestationFee" ]; then \
-				current_encoded_args=$$(cast abi-encode "constructor(address)" $(OWNER)); \
-				current_contract_path_name="contracts/AutomataDcapAttestationFee.sol:AutomataDcapAttestationFee"; \
-			elif [ "$$contract" == "V3QuoteVerifier" ]; then \
-				current_encoded_args=$$(cast abi-encode "constructor(address,address)" $$P256_ADDRESS_VAL $$ROUTER_ADDR); \
-				current_contract_path_name="contracts/verifiers/V3QuoteVerifier.sol:V3QuoteVerifier"; \
-			elif [ "$$contract" == "V4QuoteVerifier" ]; then \
-				current_encoded_args=$$(cast abi-encode "constructor(address,address)" $$P256_ADDRESS_VAL $$ROUTER_ADDR); \
-				current_contract_path_name="contracts/verifiers/V4QuoteVerifier.sol:V4QuoteVerifier"; \
-			fi; \
-			echo "Verifying $$contract with encoded args: $$current_encoded_args"; \
-			forge verify-contract \
-				--rpc-url $(RPC_URL) \
-				--verifier $(VERIFIER) \
-				--watch \
-				$(if $(VERIFIER_URL),--verifier-url $(VERIFIER_URL)) \
-				$$addr \
-				$$current_contract_path_name \
-				--constructor-args $$current_encoded_args || true; \
-		fi; \
-	done
+out/V4QuoteVerifier.bin: | deps
+	$(SOLC) contracts/verifiers/V4QuoteVerifier.sol --bin -o out/
 
-# ZK Configurations
-config-zk: check_env get_owner
-	@OWNER=$(OWNER) \
-		forge script AttestationScript \
-		$(if $(MULTICHAIN),,--rpc-url $(RPC_URL)) \
-		$(if $(UNLOCKED), --unlocked --sender $(OWNER), \
-		$(if $(PRIVATE_KEY), --private-key $(PRIVATE_KEY), \
-		--keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD))) \
-		$(if $(SIMULATED),, --broadcast) \
-		$(if $(filter true,$(SIMULATED)),,--skip-simulation) \
-		$(if $(LEGACY), --legacy) \
-		-vv \
-		--sig "configureZk(uint8,address,bytes32)" \
-		$(if $(ZKVM_SELECTOR), $(ZKVM_SELECTOR), $(error ZKVM_SELECTOR is not set)) \
-		$(if $(ZKVM_VERIFIER_ADDRESS), $(ZKVM_VERIFIER_ADDRESS), $(error ZKVM_VERIFIER_ADDRESS is not set)) \
-		$(if $(ZKVM_PROGRAM_IDENTIFIER), $(ZKVM_PROGRAM_IDENTIFIER), $(error ZKVM_PROGRAM_IDENTIFIER is not set))
+out/AutomataDcapAttestationFee.bin: | deps
+	$(SOLC) contracts/AutomataDcapAttestationFee.sol --bin -o out/
 
-config-verifier: check_env get_owner
-	@OWNER=$(OWNER) \
-		forge script AttestationScript \
-		$(if $(MULTICHAIN),,--rpc-url $(RPC_URL)) \
-		$(if $(UNLOCKED), --unlocked --sender $(OWNER), \
-		$(if $(PRIVATE_KEY), --private-key $(PRIVATE_KEY), \
-		--keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD))) \
-		$(if $(SIMULATED),, --broadcast) \
-		$(if $(filter true,$(SIMULATED)),,--skip-simulation) \
-		$(if $(LEGACY), --legacy) \
-		-vv \
-		--sig "configVerifier(uint256)" \
-		$(if $(QUOTE_VERIFIER_VERSION), $(QUOTE_VERIFIER_VERSION), $(error QUOTE_VERIFIER_VERSION is not set)) \
+.PHONY: build
+build: out/PCCSRouter.bin out/V4QuoteVerifier.bin out/AutomataDcapAttestationFee.bin
 
-config-router: check_env get_owner
-	@OWNER=$(OWNER) \
-		forge script DeployRouter \
-		$(if $(MULTICHAIN),,--rpc-url $(RPC_URL)) \
-		$(if $(UNLOCKED), --unlocked --sender $(OWNER), \
-		$(if $(PRIVATE_KEY), --private-key $(PRIVATE_KEY), \
-		--keystore $(KEYSTORE_PATH) --password $(KEYSTORE_PASSWORD))) \
-		$(if $(SIMULATED),, --broadcast) \
-		$(if $(filter true,$(SIMULATED)),,--skip-simulation) \
-		$(if $(LEGACY), --legacy) \
-		-vv \
-		--sig "setAuthorizedCaller(address,bool)" \
-		$(if $(CALLER_ADDRESS), $(CALLER_ADDRESS), $(error CALLER_ADDRESS is not set)) \
-		$(if $(AUTHORIZED), true, false)
+# ---------------------------------------------------------------- deploy
+# Addresses are written to deployment/<ContractName>, the interface ethrex's TDX
+# deployer reads. The on-chain-pccs addresses are expected to already be present in
+# deployment/ (ethrex copies them across before invoking this).
 
-# Utility targets
+deploy-router: out/PCCSRouter.bin
+	$(eval TCB_EVAL_DAO_ADDR := $(shell cat deployment/AutomataTcbEvalDao))
+	$(eval PCS_ADDR := $(shell cat deployment/AutomataPcsDao))
+	$(eval PCK_ADDR := $(shell cat deployment/AutomataPckDao))
+	$(eval X509_ADDR := $(shell cat deployment/PCKHelper))
+	$(eval X509_CRL_ADDR := $(shell cat deployment/X509CRLHelper))
+	$(eval FMSPC_HELPER_ADDR := $(shell cat deployment/FmspcTcbHelper))
+	rex deploy --print-address $(shell cat out/PCCSRouter.bin) 0 $(PRIVATE_KEY) -- \
+		"constructor(address,address,address,address,address,address,address)" \
+		$(OWNER) $(TCB_EVAL_DAO_ADDR) $(PCS_ADDR) $(PCK_ADDR) $(X509_ADDR) $(X509_CRL_ADDR) $(FMSPC_HELPER_ADDR) \
+		> deployment/PCCSRouter
+
+# The router resolves QE identity and FMSPC TCB through DAOs registered per evaluation
+# number, so registering them is required, not optional: without it every quote reverts.
+configure-router: deploy-router
+	$(eval ROUTER_ADDR := $(shell cat deployment/PCCSRouter))
+	$(eval ENCLAVE_ID_ADDR := $(shell cat deployment/AutomataEnclaveIdentityDao))
+	$(eval FMSPC_TCB_ADDR := $(shell cat deployment/AutomataFmspcTcbDaoVersioned))
+	rex send $(ROUTER_ADDR) "setQeIdDaoVersionedAddr(uint32,address)" $(TCB_EVAL_NUMBER) $(ENCLAVE_ID_ADDR) -k $(PRIVATE_KEY)
+	rex send $(ROUTER_ADDR) "setFmspcTcbDaoVersionedAddr(uint32,address)" $(TCB_EVAL_NUMBER) $(FMSPC_TCB_ADDR) -k $(PRIVATE_KEY)
+
+deploy-verifier: out/V4QuoteVerifier.bin configure-router
+	$(eval ROUTER_ADDR := $(shell cat deployment/PCCSRouter))
+	rex deploy --print-address $(shell cat out/V4QuoteVerifier.bin) 0 $(PRIVATE_KEY) -- \
+		"constructor(address,address)" $(P256_ADDR) $(ROUTER_ADDR) \
+		> deployment/V4QuoteVerifier
+
+deploy-entrypoint: out/AutomataDcapAttestationFee.bin deploy-verifier
+	$(eval V4_ADDR := $(shell cat deployment/V4QuoteVerifier))
+	rex deploy --print-address $(shell cat out/AutomataDcapAttestationFee.bin) 0 $(PRIVATE_KEY) -- \
+		"constructor(address)" $(OWNER) \
+		> deployment/AutomataDcapAttestationFee
+	$(eval DCAP_ADDR := $(shell cat deployment/AutomataDcapAttestationFee))
+	rex send $(DCAP_ADDR) "setQuoteVerifier(address)" $(V4_ADDR) -k $(PRIVATE_KEY)
+	rex send $(shell cat deployment/PCCSRouter) "setAuthorized(address,bool)" $(V4_ADDR) true -k $(PRIVATE_KEY)
+
+deploy: deploy-entrypoint
+
 clean:
-	forge clean
-	rm -rf cache_forge
+	rm -rf out lib deployment/PCCSRouter deployment/V4QuoteVerifier \
+		deployment/AutomataDcapAttestationFee
 
-# Help target
-help:
-	@echo "Available targets:"
-	@echo "  deploy-router          Deploy PCCSRouter"
-	@echo "  deploy-attestation     Deploy AutomataDcapAttestationFee"
-	@echo "  deploy-verifier        Deploy QuoteVerifier, must specify QUOTE_VERIFIER_VERSION"
-	@echo "  deploy-all-verifiers   Deploy all QuoteVerifier contracts with versions that are currently supported"
-	@echo "  deploy-all             Deploy all contracts"
-	@echo "  verify-all             Verify all contracts"
-	@echo "  config-zk              zkVM Configuration"
-	@echo "  config-verifier        QuoteVerifier Configuration"
-	@echo "  config-router          Set authorization for calling PCCSRouter"
-	@echo "  clean                  Remove build artifacts"
-	@echo ""
-	@echo "Wallet environment variables: (you only need to set one)"
-	@echo "  PRIVATE_KEY            Private key for wallet"
-	@echo "  KEYSTORE_PATH          Path to keystore directory"
-	@echo ""
-	@echo "Required environment variables:"
-	@echo "  RPC_URL                RPC URL for the target network"
-	@echo ""
-	@echo "Optional environment variables:"
-	@echo "  VERIFIER               Contract verifier (default: etherscan)"
-	@echo "  VERIFIER_URL           Custom verifier API URL"
-	@echo "  ETHERSCAN_API_KEY      API key for contract verification"
-	@echo "  SIMULATED              Simulate deployment (default: false)"
-	@echo "  DEPLOYMENT_DIR         Deployment directory (default: ../rust-crates/libraries/network-registry/deployment/current)"
-	@echo ""
-	@echo "Example usage:"
-	@echo "  make deploy-all RPC_URL=xxx"
-	@echo "  make verify-all RPC_URL=xxx ETHERSCAN_API_KEY=xxx"
-
-.PHONY: check_env clean help deploy-% verify-% config-%
+.PHONY: deploy deploy-router configure-router deploy-verifier deploy-entrypoint clean

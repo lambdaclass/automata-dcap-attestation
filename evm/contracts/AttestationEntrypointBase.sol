@@ -9,10 +9,8 @@ import {Header} from "./types/CommonStruct.sol";
 import {Ownable} from "solady/auth/Ownable.sol";
 import {EnumerableSet} from "openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-// ZK-Coprocessor imports:
-import {IRiscZeroVerifier} from "risc0/IRiscZeroVerifier.sol";
-import {ISP1Verifier} from "@sp1-contracts/ISP1Verifier.sol";
-import {IPicoVerifier} from "./zk/pico/interfaces/IPicoVerifier.sol";
+// ZK-Coprocessor imports are omitted: _verifyAndAttestWithZKProof reverts in this
+// fork, so the risc0 and sp1-contracts dependencies are not pulled in.
 
 enum ZkCoProcessorType {
     // if the ZkCoProcessorType is included as None in the AttestationSubmitted event log
@@ -259,53 +257,11 @@ abstract contract AttestationEntrypointBase is Ownable {
         bytes calldata proofBytes,
         uint32 tcbEvalNumber
     ) internal returns (bool success, bytes memory verifiedOutput) {
-        ZkCoProcessorConfig memory zkConfig = _zkConfig[zkCoprocessor];
-
-        // First, determine the validity of program ID and pick the appropriate ZK Verifier
-        if (!_programIdConfig[zkCoprocessor].contains(identifier)) {
-            return (false, bytes("Invalid ZK Program Identifier"));
-        }
-
-        bytes4 selector = bytes4(proofBytes[0:4]);
-        address verifier = _zkVerifierConfig[zkCoprocessor][selector];
-
-        if (verifier == FROZEN) {
-            return (false, bytes("ZK Route has been frozen"));
-        }
-
-        if (verifier == address(0)) {
-            verifier = zkConfig.defaultZkVerifier;
-        }
-
-        // the verifier must be set at this point,
-        // otherwise we cannot verify the proof
-        if (verifier == address(0)) {
-            return (false, bytes("ZK Verifier is not configured"));
-        }
-
-        if (zkCoprocessor == ZkCoProcessorType.RiscZero) {
-            IRiscZeroVerifier(verifier).verify(proofBytes, identifier, sha256(output));
-        } else if (zkCoprocessor == ZkCoProcessorType.Succinct) {
-            ISP1Verifier(verifier).verifyProof(identifier, output, proofBytes);
-        } else if (zkCoprocessor == ZkCoProcessorType.Pico) {
-            IPicoVerifier(verifier).verifyPicoProof(
-                identifier,
-                output,
-                abi.decode(proofBytes[4:], (uint256[8]))
-            );
-        } else {
-            return (false, bytes("Unknown ZK Co-Processor"));
-        }
-
-        // verifies the output
-        uint16 version = uint16(bytes2(output[2:4]));
-        IQuoteVerifier quoteVerifier = quoteVerifiers[version];
-        if (address(quoteVerifier) == address(0)) {
-            return (false, bytes("Unsupported quote version"));
-        }
-        (success, verifiedOutput) = quoteVerifier.verifyZkOutput(output, tcbEvalNumber);
-
-        emit AttestationSubmitted(success, zkCoprocessor, verifiedOutput);
+        // Disabled in this fork. Accepting a ZK proof *about* a DCAP verification is a
+        // second, independent trust path into the same attestation result, and we only
+        // want the fully on-chain one. Reverting also keeps the risc0 and sp1-contracts
+        // dependencies out of the build.
+        revert();
     }
 
     /**
