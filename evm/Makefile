@@ -31,7 +31,7 @@ TCB_EVAL_NUMBER ?= 19
 # deployment was built from. This revision pins its own openzeppelin and solady, so
 # pinning it here fixes the whole transitive tree.
 # Comments stay off the value line: Make keeps whitespace before an inline `#`.
-ON_CHAIN_PCCS_REV = 4f1032d924b0262cc977d1ddf4bb7a82d8f49c2c
+ON_CHAIN_PCCS_REV = 03bc8e784b9c5e3901f993116003b03012455ba1
 
 # Clone if absent, then re-assert and verify the pin on every run, so a stale or
 # half-checked-out lib/ is corrected rather than silently reused. `make clean` removes
